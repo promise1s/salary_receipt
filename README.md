@@ -1,20 +1,30 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# 薪资计算器 Salary Receipt
 
-# Run and deploy your AI Studio app
+> 把上班从「熬时间」变成「看钱跳动」
 
-This contains everything you need to run your app locally.
+一个住在 macOS 菜单栏里的实时薪资计算器。
+打开电脑就能看到今天已经赚了多少钱，精确到分。
 
-View your app in AI Studio: https://ai.studio/apps/2a693c2a-b938-465b-9379-217392cc7874
+## 功能
 
-## Run Locally
+- 💰 实时跳动的今日收入，按秒计算
+- 🍱 餐补 / 打车补贴倒计时
+- 📅 本月累计收入统计
+- 🛍️ 心愿单：把想买的东西换算成「还要打几天工」
+- 📊 菜单栏进度条图标，一眼看出今天进度
 
-**Prerequisites:**  Node.js
+## 系统要求
 
+- macOS（M1 / M2 / M3 / M4 芯片）
+- Intel Mac 暂不支持
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## 安装
+
+1. 前往 [Releases](../../releases) 页面
+2. 下载最新版 `.dmg` 文件
+3. 打开 dmg，把app拖入应用程序文件夹
+4. 首次打开遇到安全提示：系统设置 → 隐私与安全性 → 仍要打开
+
+## 内测中
+
+欢迎提交 Issue 反馈问题或功能建议～
