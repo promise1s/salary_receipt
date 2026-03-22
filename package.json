@@ -12,6 +12,7 @@
     "lint": "tsc --noEmit",
     "electron:start": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "dist": "npm run build && electron-builder --mac dmg",
+    "dist:win": "npm run build && electron-builder --win nsis",
     "postinstall": "electron-builder install-app-deps"
   },
   "build": {
@@ -59,12 +60,32 @@
         }
       ]
     },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "SalaryReceipt-${version}-Setup.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "薪资计算器"
+    },
     "files": [
       "dist/**/*",
       "electron-main.cjs",
       "electron-server.cjs",
       "public/**/*",
       "icon.icns",
+      "assets/icon.ico",
       "package.json",
       "!**/*.cjson",
       "!**/*.map",

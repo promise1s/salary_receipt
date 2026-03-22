@@ -1,0 +1,56 @@
+name: Build Windows Installer
+
+on:
+  push:
+    tags:
+      - 'v*'          # 推送 v1.0.1 这样的tag时自动触发
+  workflow_dispatch:   # 允许在GitHub网页上手动触发，方便调试
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # better-sqlite3 是原生模块，必须在 Windows 上重新编译
+      # windows-latest 自带 Python 和 MSVC，这里确保 node-gyp 能找到它们
+      - name: Setup Python (for node-gyp)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend (Vite)
+        run: npm run build
+
+      - name: Package Windows installer
+        run: npx electron-builder --win nsis
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 把打包产物上传到 Actions artifact，可以直接从 Actions 页面下载
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-${{ github.ref_name }}
+          path: dist/*.exe
+          retention-days: 30
+
+      # 如果是 tag 触发，自动把 .exe 上传到 GitHub Release
+      - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

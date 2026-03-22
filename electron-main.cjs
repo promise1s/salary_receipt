@@ -10,6 +10,10 @@ let serverProcess = null;
 let currentPort = null;
 let trayIconTimer = null;
 
+// ─── 平台检测 ──────────────────────────────────────────────────────────────────
+const IS_WIN = process.platform === 'win32';
+const IS_MAC = process.platform === 'darwin';
+
 const UI_UPGRADE = {
   window: {
     width: 320,
@@ -225,6 +229,7 @@ function rgbaToPngBuffer(rgba, width, height) {
   ]);
 }
 
+// ─── [改动1] 进度条颜色：Windows用白色（深色任务栏可见），macOS用黑色（setTemplate会反色）
 function drawBarsToRgba({ filled, total }) {
   const scale = 2;
   const width = UI_UPGRADE.menubar.width * scale;
@@ -238,6 +243,11 @@ function drawBarsToRgba({ filled, total }) {
   const left = Math.floor((width - totalWidth) / 2);
   const top = Math.floor((height - barHeight) / 2);
   const emptyAlpha = Math.round(255 * UI_UPGRADE.menubar.emptyOpacity);
+
+  // Windows任务栏默认深色，用白色图标；macOS用黑色（setTemplateImage会自动反色适配深浅模式）
+  const pixelR = IS_WIN ? 255 : 0;
+  const pixelG = IS_WIN ? 255 : 0;
+  const pixelB = IS_WIN ? 255 : 0;
 
   function setPixel(x, y, r, g, b, a) {
     if (x < 0 || y < 0 || x >= width || y >= height) return;
@@ -259,9 +269,9 @@ function drawBarsToRgba({ filled, total }) {
       for (let x = x0; x <= x1; x++) {
         const onBorder = (x === x0 || x === x1 || y === y0 || y === y1);
         if (isFilled) {
-          setPixel(x, y, 0, 0, 0, 255);
+          setPixel(x, y, pixelR, pixelG, pixelB, 255);
         } else if (onBorder) {
-          setPixel(x, y, 0, 0, 0, emptyAlpha);
+          setPixel(x, y, pixelR, pixelG, pixelB, emptyAlpha);
         }
       }
     }
@@ -270,6 +280,7 @@ function drawBarsToRgba({ filled, total }) {
   return { rgba, width, height };
 }
 
+// ─── [改动2] setTemplateImage 仅在 macOS 上调用，Windows不支持此API
 function makeProgressNativeImage(now = new Date()) {
   const { ratio } = getTodayWorkProgress(now);
   const filled = ratioToBars(ratio);
@@ -284,7 +295,13 @@ function makeProgressNativeImage(now = new Date()) {
   }
 
   img = img.resize({ width: UI_UPGRADE.menubar.width, height: UI_UPGRADE.menubar.height });
-  img.setTemplateImage(true);
+
+  // setTemplateImage 是 macOS 专属 API，让系统根据深浅色模式自动反色
+  // Windows 上调用此方法会导致图标变成黑色方块，必须跳过
+  if (IS_MAC) {
+    img.setTemplateImage(true);
+  }
+
   return img;
 }
 
@@ -306,6 +323,7 @@ if (!gotTheLock) {
   app.quit();
 }
 
+// app.dock 仅 macOS 存在，Windows 上安全跳过
 if (app.dock) app.dock.hide();
 
 function createMainWindow(port) {
@@ -318,7 +336,8 @@ function createMainWindow(port) {
     backgroundColor: UI_UPGRADE.window.background,
     resizable: false,
     fullscreenable: false,
-    movable: false,
+    // Windows上 movable:false 会导致窗口完全无法拖动且定位有时异常，改为可移动
+    movable: IS_WIN ? true : false,
     alwaysOnTop: true,
     skipTaskbar: true,
     hasShadow: true,
@@ -539,16 +558,27 @@ function createMainWindow(port) {
   });
 }
 
-function positionWindowUnderTray(bounds) {
+// ─── [改动3] 窗口弹出位置：macOS托盘在顶部往下弹，Windows托盘在右下角往上弹
+function positionWindowNearTray(bounds) {
   if (!mainWindow) return;
 
   const windowBounds = mainWindow.getBounds();
   const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y });
   const workArea = display.workArea;
 
+  // 水平方向：始终以托盘图标为中心对齐窗口
   let x = Math.round(bounds.x + bounds.width / 2 - windowBounds.width / 2);
-  let y = Math.round(bounds.y + bounds.height + 6);
 
+  let y;
+  if (IS_WIN) {
+    // Windows：系统托盘在屏幕右下角，窗口从图标上方弹出
+    y = Math.round(bounds.y - windowBounds.height - 6);
+  } else {
+    // macOS：menubar在屏幕顶部，窗口从图标下方弹出
+    y = Math.round(bounds.y + bounds.height + 6);
+  }
+
+  // 边界保护：确保窗口不超出可用工作区
   x = Math.max(workArea.x, Math.min(x, workArea.x + workArea.width - windowBounds.width));
   y = Math.max(workArea.y, Math.min(y, workArea.y + workArea.height - windowBounds.height));
 
@@ -566,7 +596,7 @@ function showOrTogglePopover(bounds) {
     return;
   }
 
-  positionWindowUnderTray(bounds);
+  positionWindowNearTray(bounds);
   mainWindow.show();
   mainWindow.focus();
 }
@@ -653,5 +683,5 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  // Menubar app: keep running.
+  // Menubar/tray app: 关闭所有窗口后继续保持运行（托盘常驻）
 });
