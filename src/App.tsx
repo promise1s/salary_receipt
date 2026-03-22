@@ -18,6 +18,13 @@ import {
 import { UserProfile, WishItem, SalarySnapshot, SalaryInputType } from './types';
 import { DEFAULT_PROFILE, RECEIPT_WIDTH, RECEIPT_HEIGHT } from './constants';
 import { storage } from './services/storage';
+
+// ipcRenderer：在Electron环境中同步模拟时间到主进程（托盘图标）
+// 非Electron环境（浏览器预览）时安全降级为空操作
+const ipcRenderer = (window as any).require?.('electron')?.ipcRenderer ?? null;
+function syncMockDateToTray(isoString: string | null) {
+  ipcRenderer?.invoke('salaryReceipt:setMockDate', isoString).catch(() => {});
+}
 import { salaryEngine } from './services/salaryEngine';
 
 import { WidgetView } from './WidgetView';
@@ -164,6 +171,8 @@ export default function App() {
             onStopSimulation={() => {
               (window as any).simulatedActive = false;
               setSimulatedTime(null);
+              // 恢复真实时间，托盘进度条回到实际进度
+              syncMockDateToTray(null);
             }}
           />
         )}
@@ -497,6 +506,8 @@ function SetupWizard({
                   // Global state update for simulation
                   (window as any).simulatedActive = true;
                   (window as any).setSimulatedTime?.('2026-02-17T15:00:00');
+                  // 同步模拟时间到主进程，托盘进度条跟着更新
+                  syncMockDateToTray('2026-02-17T15:00:00');
                 }}
                 className="w-full py-3 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-100 hover:bg-emerald-100 transition-colors"
               >
