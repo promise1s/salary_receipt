@@ -14,6 +14,15 @@ let trayIconTimer = null;
 const IS_WIN = process.platform === 'win32';
 const IS_MAC = process.platform === 'darwin';
 
+// ─── [修复1] 测试日期覆盖：前端模拟日期时，托盘图标也跟着同步更新
+// null = 使用真实时间；非null = 使用前端传来的模拟时间
+let mockNow = null;
+
+// 获取当前有效时间（真实 or 模拟）
+function getNow() {
+  return mockNow ? new Date(mockNow) : new Date();
+}
+
 const UI_UPGRADE = {
   window: {
     width: 320,
@@ -23,13 +32,16 @@ const UI_UPGRADE = {
     contentScale: 0.82,
   },
   menubar: {
-    width: IS_WIN ? 32 : 60,   // 改这里
-    height: IS_WIN ? 32 : 22,  // 改这里
+    // macOS用宽扁形，Windows用正方形（托盘图标必须是正方形）
+    width: IS_WIN ? 32 : 60,
+    height: IS_WIN ? 32 : 22,
     barCount: 5,
-    barWidth: IS_WIN ? 4 : 5,  // 改这里
-    barHeight: IS_WIN ? 18 : 13, // 改这里
-    barGap: IS_WIN ? 2 : 3,    // 改这里
-    emptyOpacity: 0.2,
+    barWidth: IS_WIN ? 4 : 5,
+    barHeight: IS_WIN ? 18 : 13,
+    barGap: IS_WIN ? 2 : 3,
+    // [修复2] Windows上空bar透明度提高到0.5，深色任务栏上更清晰可见
+    // macOS保持0.2（setTemplateImage会自动处理深浅色）
+    emptyOpacity: IS_WIN ? 0.5 : 0.2,
     refreshSeconds: 10,
   },
   copy: {
@@ -229,7 +241,7 @@ function rgbaToPngBuffer(rgba, width, height) {
   ]);
 }
 
-// ─── [改动1] 进度条颜色：Windows用白色（深色任务栏可见），macOS用黑色（setTemplate会反色）
+// 进度条颜色：Windows用白色（深色任务栏可见），macOS用黑色（setTemplate会反色）
 function drawBarsToRgba({ filled, total }) {
   const scale = 2;
   const width = UI_UPGRADE.menubar.width * scale;
@@ -244,7 +256,7 @@ function drawBarsToRgba({ filled, total }) {
   const top = Math.floor((height - barHeight) / 2);
   const emptyAlpha = Math.round(255 * UI_UPGRADE.menubar.emptyOpacity);
 
-  // Windows任务栏默认深色，用白色图标；macOS用黑色（setTemplateImage会自动反色适配深浅模式）
+  // Windows任务栏默认深色用白色图标；macOS用黑色（setTemplateImage自动适配深浅模式）
   const pixelR = IS_WIN ? 255 : 0;
   const pixelG = IS_WIN ? 255 : 0;
   const pixelB = IS_WIN ? 255 : 0;
@@ -280,7 +292,7 @@ function drawBarsToRgba({ filled, total }) {
   return { rgba, width, height };
 }
 
-// ─── [改动2] setTemplateImage 仅在 macOS 上调用，Windows不支持此API
+// setTemplateImage 仅在 macOS 上调用，Windows不支持此API（会导致图标变黑块）
 function makeProgressNativeImage(now = new Date()) {
   const { ratio } = getTodayWorkProgress(now);
   const filled = ratioToBars(ratio);
@@ -305,10 +317,11 @@ function makeProgressNativeImage(now = new Date()) {
   return img;
 }
 
+// [修复1] updateTrayIcon 使用 getNow()，自动感知模拟时间
 function updateTrayIcon() {
   if (!tray) return;
   try {
-    const now = new Date();
+    const now = getNow();
     const { ratio } = getTodayWorkProgress(now);
     tray.setImage(makeProgressNativeImage(now));
     const normalized = normalizeWorkingHoursRange(workingHoursRange) || DEFAULT_WORKING_HOURS_RANGE;
@@ -558,7 +571,7 @@ function createMainWindow(port) {
   });
 }
 
-// ─── [改动3] 窗口弹出位置：macOS托盘在顶部往下弹，Windows托盘在右下角往上弹
+// 窗口弹出位置：macOS托盘在顶部往下弹，Windows托盘在右下角往上弹
 function positionWindowNearTray(bounds) {
   if (!mainWindow) return;
 
@@ -602,7 +615,7 @@ function showOrTogglePopover(bounds) {
 }
 
 function createTray() {
-  tray = new Tray(makeProgressNativeImage(new Date()));
+  tray = new Tray(makeProgressNativeImage(getNow()));
   tray.setToolTip('Salary Receipt');
 
   tray.on('click', (_event, bounds) => {
@@ -649,6 +662,7 @@ app.whenReady().then(async () => {
 
   try {
     ipcMain.handle('salaryReceipt:getWorkingHoursRange', () => workingHoursRange);
+
     ipcMain.handle('salaryReceipt:setWorkingHoursRange', (_evt, rangeStr) => {
       const normalized = normalizeWorkingHoursRange(rangeStr);
       if (!normalized) {
@@ -659,6 +673,21 @@ app.whenReady().then(async () => {
       updateTrayIcon();
       return { ok: true, value: workingHoursRange };
     });
+
+    // [修复1] 前端模拟日期时通知主进程同步，托盘图标跟着更新
+    // 前端调用方式：ipcRenderer.invoke('salaryReceipt:setMockDate', '2026-02-17T15:00:00')
+    // 恢复真实时间：ipcRenderer.invoke('salaryReceipt:setMockDate', null)
+    ipcMain.handle('salaryReceipt:setMockDate', (_evt, isoString) => {
+      if (isoString === null || isoString === undefined) {
+        mockNow = null;
+      } else {
+        const parsed = new Date(isoString);
+        mockNow = isNaN(parsed.getTime()) ? null : isoString;
+      }
+      updateTrayIcon();
+      return { ok: true, mockNow };
+    });
+
   } catch (error) {
     console.warn('IPC setup skipped:', error);
   }
