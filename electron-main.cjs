@@ -23,12 +23,12 @@ const UI_UPGRADE = {
     contentScale: 0.82,
   },
   menubar: {
-    width: 60,
-    height: 22,
+    width: IS_WIN ? 32 : 60,   // 改这里
+    height: IS_WIN ? 32 : 22,  // 改这里
     barCount: 5,
-    barWidth: 5,
-    barHeight: 13,
-    barGap: 3,
+    barWidth: IS_WIN ? 4 : 5,  // 改这里
+    barHeight: IS_WIN ? 18 : 13, // 改这里
+    barGap: IS_WIN ? 2 : 3,    // 改这里
     emptyOpacity: 0.2,
     refreshSeconds: 10,
   },
